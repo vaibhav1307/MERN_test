@@ -72,7 +72,7 @@ export default function DataTable() {
       try {
         setLoading(true);
         const response = await fetch(
-          `http://localhost:5000/api/csv/data?page=${page}&limit=10`,
+          `http://localhost:5000/csv/data?page=${page}&limit=10`,
           {
             headers: {
               'Authorization': `Bearer ${token}`
