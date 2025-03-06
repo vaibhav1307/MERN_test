@@ -10,7 +10,7 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const API_URL = 'http://localhost:5000/api';
+const API_URL = 'http://localhost:5000';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [authState, setAuthState] = useState<AuthState>({
@@ -24,10 +24,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (token) {
             fetchUserData(token);
         }
-    },);
+    }, [authState.token]);
 
     const fetchUserData = async (token: string) => {
         try {
+            console.log("fetchUserData called");
             const response = await axios.get(`${API_URL}/auth/me`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -48,6 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const login = async (credentials: LoginCredentials | string) => {
         try {
+            console.log("login function called");
             let token: string;
             let user: User;
 

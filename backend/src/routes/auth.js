@@ -6,7 +6,7 @@ import { authenticateToken } from '../middleware/auth.js';
 const router = express.Router();
 
 // Register new user
-router.post('/auth/register', async (req, res, next) => { // Added /auth prefix
+router.post('/register', async (req, res, next) => {
     try {
         const { email, password } = req.body;
 
@@ -32,7 +32,7 @@ router.post('/auth/register', async (req, res, next) => { // Added /auth prefix
 });
 
 // Login user
-router.post('/auth/login', async (req, res, next) => { // Added /auth prefix
+router.post('/login', async (req, res, next) => { // Removed /auth prefix
     try {
         const { email, password } = req.body;
 
@@ -60,7 +60,7 @@ router.post('/auth/login', async (req, res, next) => { // Added /auth prefix
 });
 
 // Get current user
-router.get('/auth/me', authenticateToken, (req, res) => { // Added /auth prefix
+router.get('/me', authenticateToken, (req, res) => { // Removed /auth prefix
     res.json({ user: req.user });
 });
 
