@@ -1,0 +1,154 @@
+Project Title:
+MERN Dashboard with CSV File Upload & Authentication
+
+Project Description:
+Build a full stack MERN application that includes user authentication, a protected dashboard, and CSV file upload functionality. After a successful login, users should see a single-page application (SPA) with a consistent layout (navbar, header, and footer) and a dashboard where they can upload a CSV file containing up to 1 crore rows. The CSV data should be streamed, processed in batches, stored in a MongoDB Atlas cluster, and then displayed in a paginated table.
+
+Detailed Instructions:
+
+1. Backend (Node.js/Express & MongoDB)
+Project Setup:
+
+Initialize a new Node.js project (npm init).
+Install necessary dependencies:
+express, cors, dotenv, mongoose, bcrypt, jsonwebtoken, multer, and a CSV parser library (e.g., csv-parser or fast-csv).
+Create a .env file with the following environment variables:
+PORT (server port)
+MONGODB_URI (MongoDB Atlas connection string)
+JWT_SECRET (secret key for JWT signing)
+Server & Middleware:
+
+Create an Express server.
+Set up middleware:
+cors to allow cross-origin requests.
+express.json() for JSON request parsing.
+dotenv to load environment variables.
+User Authentication:
+
+Mongoose User Model:
+Define a schema with fields like email and password.
+Endpoints:
+POST /api/auth/register:
+Accepts user registration data.
+Hash the password using bcrypt.
+Save the user to MongoDB.
+POST /api/auth/login:
+Validate user credentials.
+On successful login, generate a JWT using jsonwebtoken.
+Auth Middleware:
+Create middleware that verifies the JWT for protected routes.
+CSV File Upload & Processing:
+
+File Upload Endpoint (POST /api/upload):
+Use multer to handle file uploads.
+Accept only CSV files and validate file size/type.
+CSV Processing:
+Stream the CSV file using the chosen CSV parser.
+Process the file row-by-row, batching inserts into MongoDB (to handle up to 1 crore rows efficiently).
+Implement error handling for malformed CSV files.
+Data Retrieval Endpoint:
+
+GET /api/data:
+Retrieve and return CSV data from MongoDB.
+Support pagination via query parameters (e.g., page number, limit).
+
+
+2. Frontend (React)
+Project Setup:
+
+Create a React application (using Create React App or Vite).
+Install dependencies:
+react-router-dom, axios (or use the fetch API), and a UI library (choose one: Material UI, Tailwind CSS, or Bootstrap).
+Routing & Layout:
+
+React Router Setup:
+Create public routes (e.g., /login).
+Create a protected route (/dashboard) that is accessible only if the user is authenticated.
+Common Layout Component:
+Include a navbar, header, and footer.
+Ensure a consistent look across the application.
+Authentication:
+
+Login Component:
+Build a login form with email and password fields.
+On submit, call the /api/auth/login endpoint.
+On successful login, store the JWT (in localStorage or React Context) and redirect to the dashboard.
+Protected Route Component:
+Create a higher-order component (or use a custom hook) to check authentication before rendering protected components.
+Dashboard & CSV Upload:
+
+Dashboard Landing Page:
+Display a header with the text “Input your csv file.”
+FileUpload Component:
+Provide a file input and an upload button.
+Show a progress indicator or spinner during the upload process.
+After the CSV is processed, fetch and display the CSV data below in a table.
+Implement pagination for the table to handle large datasets.
+Optionally add search or filter functionality for enhanced data interaction.
+User Feedback & Error Handling:
+
+Display notifications or alerts for:
+Successful logins.
+File upload errors (invalid file type, size issues, processing errors).
+Any network/API errors.
+Use loading spinners or indicators during asynchronous operations (login, file upload, data fetch).
+
+Responsive & Visually Appealing UI:
+Ensure that the UI is responsive across different devices.
+Use a consistent color scheme, professional typography, and clean spacing.
+Consider smooth animations or transitions for user interactions.
+Security:
+Secure all API endpoints (e.g., validate input, sanitize data).
+Use HTTPS in production.
+Implement rate limiting if necessary to prevent abuse.
+Documentation:
+Create a README with setup instructions, API documentation, and deployment steps.
+Document code and endpoints for future reference or examiners.
+
+Using the detailed instructions above, please create a fully functional MERN stack application with user authentication, a protected dashboard, CSV file upload with streaming and batch processing, and a visually appealing, responsive UI. Ensure to implement robust error handling, testing (both frontend and backend), and deployment instructions as described.
+
+use below connection string to connect to mongodb atlas :-
+mongodb+srv://<db_username>:<db_password>@merntest1.9k49c.mongodb.net/?retryWrites=true&w=majority&appName=MernTest1
+
+
+
+
+
+
+
+
+
+ive verified above steps.
+they all checks out.
+but im getting same issue. i check both login and signup api arent getting any response.
+register api details from networks tab :-
+
+Request URL:
+http://localhost:5173/api/auth/registerRequest Method:
+POSTStatus Code:
+500 Internal Server ErrorRemote Address:
+127.0.0.1:5173Referrer Policy:
+strict-origin-when-cross-origin
+
+{email: "test@test.com", password: "test", username: "test"}
+email
+: 
+"test@test.com"
+password
+: 
+"test"
+username
+: 
+"test"
+
+no response 
+and in terminal i see :-
+VITE v5.4.8  ready in 1134 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+  ➜  press h + enter to show help
+12:10:38 AM [vite] http proxy error: /auth/register
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1712:7)
