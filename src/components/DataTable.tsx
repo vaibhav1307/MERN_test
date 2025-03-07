@@ -68,7 +68,6 @@ export default function DataTable() {
   const { token } = useAuth();
 
   useEffect(() => {
-
     const fetchData = async () => {
       try {
         setLoading(true);
@@ -80,11 +79,9 @@ export default function DataTable() {
             }
           }
         );
-
         if (!response.ok) {
           throw new Error('Failed to fetch data');
         }
-
         const result = await response.json();
         setData(result.data);
         setTotalPages(result.pagination.pages);
@@ -95,7 +92,6 @@ export default function DataTable() {
         setLoading(false);
       }
     };
-
     fetchData();
   }, [page, token]);
 
@@ -106,7 +102,6 @@ export default function DataTable() {
       </div>
     );
   }
-
   if (loading) {
     return (
       <div className="flex justify-center items-center py-8">
@@ -114,7 +109,6 @@ export default function DataTable() {
       </div>
     );
   }
-
   if (data.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">
@@ -122,10 +116,8 @@ export default function DataTable() {
       </div>
     );
   }
-
-  // Dynamically get headers from the first data item
+  
   const headers = Object.keys(data[0]?.data[0] || {});
-
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200">
@@ -143,7 +135,7 @@ export default function DataTable() {
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {data.map((item) => (
+          {data.map((item) =>
             item.data.map((row: any, rowIndex: number) => (
               <tr key={`${item._id}-${rowIndex}`}>
                 {headers.map((header) => (
@@ -156,10 +148,9 @@ export default function DataTable() {
                 ))}
               </tr>
             ))
-          ))}
+          )}
         </tbody>
       </table>
-
       <Pagination
         total={totalRecords}
         page={page}
