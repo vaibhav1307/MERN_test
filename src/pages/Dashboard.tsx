@@ -39,12 +39,15 @@ export default function Dashboard() {
                 throw new Error('Upload failed');
             }
 
+            // Assuming the server returns some data after uploading the file, handle it here.
             toast.success('File uploaded successfully');
-            setRefreshData(prev => !prev); // Trigger refresh
+            setRefreshData(true);
+
         } catch (error) {
             console.error('Upload error:', error);
             toast.error('Failed to upload file');
         } finally {
+            console.log("Uploaded and setting")
             setIsUploading(false);
             setUploadProgress(0);
         }
@@ -106,7 +109,8 @@ export default function Dashboard() {
 
             {/* Data Table */}
             <div className="bg-white rounded-lg shadow-sm">
-                <DataTable refresh={refreshData} /> {/* Pass refresh state as prop */}
+                {refreshData ? 
+                <DataTable /> : <div></div>}
             </div>
         </div>
     );

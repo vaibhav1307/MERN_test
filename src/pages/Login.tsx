@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { LoginCredentials } from '../types/auth';
@@ -16,6 +16,13 @@ export default function Login() {
     const auth = useAuth();
 
     const from = location.state?.from?.pathname || '/dashboard';
+
+    useEffect(() => {
+        const token = localStorage.getItem('token'); // Assuming your token is stored as 'token'
+        if (token) {
+            navigate('/dashboard', { replace: true });
+        }
+    }, [navigate]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

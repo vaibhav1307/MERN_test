@@ -60,7 +60,7 @@ function Pagination({ total, page, pages, onPageChange }: PaginationProps) {
 
 export default function DataTable() {
   const [data, setData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -68,6 +68,7 @@ export default function DataTable() {
   const { token } = useAuth();
 
   useEffect(() => {
+
     const fetchData = async () => {
       try {
         setLoading(true);

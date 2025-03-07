@@ -114,9 +114,672 @@ mongodb+srv://<db_username>:<db_password>@merntest1.9k49c.mongodb.net/?retryWrit
 Asynchronous Processing:
 For very large files, consider using a message queue (e.g., RabbitMQ, Kafka) to process the CSV data asynchronously. This will prevent the server from blocking while processing the file.
 
-all files:-
+all files :-
 
-1 :-
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+the current application is able to accept 5-10kb csv files and displaying it
+
+but when select csv file above 1mb, the api fails 
+
+Request URL:
+
+http://localhost:5000/csv/uploadRequest Method:
+
+POSTStatus Code:
+
+500 Internal Server ErrorRemote Address:
+
+[::1]:5000Referrer Policy:
+
+strict-origin-when-cross-origin
+
+
+
+------WebKitFormBoundaryArSCBldU21QwODI5
+
+Content-Disposition: form-data; name="file"; filename="pps__standalone_ic_admin_metric_table (1).csv"
+
+Content-Type: text/csv
+
+
+
+
+
+------WebKitFormBoundaryArSCBldU21QwODI5--
+
+
+
+response :- {"message":"Internal server error"}
+
+
+
+here are related files for you to find and fix issue :-
+
+
+
+backend/src/models/CsvData.js -
+
+import mongoose from 'mongoose';
+
+
+
+const csvDataSchema = new mongoose.Schema({
+
+  userId: {
+
+    type: mongoose.Schema.Types.ObjectId,
+
+    ref: 'User',
+
+    required: true
+
+  },
+
+  fileName: {
+
+    type: String,
+
+    required: true
+
+  },
+
+  data: {
+
+    type: [mongoose.Schema.Types.Mixed],
+
+    required: true
+
+  },
+
+  uploadedAt: {
+
+    type: Date,
+
+    default: Date.now
+
+  }
+
+});
+
+
+
+// Index for efficient querying
+
+csvDataSchema.index({ userId: 1, uploadedAt: -1 });
+
+
+
+export default mongoose.model('CsvData', csvDataSchema);
+
+backend/src/routes/csv.js -
+
+import express from 'express';
+
+import multer from 'multer';
+
+import { parse } from 'csv-parse';
+
+import { Readable } from 'stream';
+
+import { authenticateToken } from '../middleware/auth.js';
+
+import CsvData from '../models/CsvData.js';
+
+
+
+const router = express.Router();
+
+
+
+// Configure multer for CSV upload
+
+const upload = multer({
+
+  limits: {
+
+    fileSize: 1024 * 1024 * 50, // 50MB limit
+
+  },
+
+  fileFilter: (req, file, cb) => {
+
+    if (file.mimetype !== 'text/csv') {
+
+      return cb(new Error('Only CSV files are allowed'));
+
+    }
+
+    cb(null, true);
+
+  }
+
+});
+
+
+
+// Upload CSV
+
+router.post('/upload', authenticateToken, upload.single('file'), async (req, res, next) => {
+
+  try {
+
+    if (!req.file) {
+
+      return res.status(400).json({ message: 'No file uploaded' });
+
+    }
+
+
+
+    const results = [];
+
+    const stream = Readable.from(req.file.buffer.toString());
+
+    
+
+    const parser = stream.pipe(parse({
+
+      columns: true,
+
+      skip_empty_lines: true
+
+    }));
+
+
+
+    for await (const record of parser) {
+
+      results.push(record);
+
+      
+
+      // Process in batches of 1000
+
+      if (results.length === 1000) {
+
+        await CsvData.create({
+
+          userId: req.user._id,
+
+          fileName: req.file.originalname,
+
+          data: results
+
+        });
+
+        results.length = 0; // Clear the array
+
+      }
+
+    }
+
+
+
+    // Save any remaining records
+
+    if (results.length > 0) {
+
+      await CsvData.create({
+
+        userId: req.user._id,
+
+        fileName: req.file.originalname,
+
+        data: results
+
+      });
+
+    }
+
+
+
+    res.json({ message: 'CSV file processed successfully' });
+
+  } catch (error) {
+
+    next(error);
+
+  }
+
+});
+
+
+
+// Get CSV data with pagination
+
+router.get('/data', authenticateToken, async (req, res, next) => {
+
+  try {
+
+    const page = parseInt(req.query.page) || 1;
+
+    const limit = parseInt(req.query.limit) || 10;
+
+    const skip = (page - 1) * limit;
+
+
+
+    const data = await CsvData.find({ userId: req.user._id })
+
+      .sort({ uploadedAt: -1 })
+
+      .skip(skip)
+
+      .limit(limit);
+
+
+
+    const total = await CsvData.countDocuments({ userId: req.user._id });
+
+
+
+    res.json({
+
+      data,
+
+      pagination: {
+
+        total,
+
+        page,
+
+        pages: Math.ceil(total / limit)
+
+      }
+
+    });
+
+  } catch (error) {
+
+    next(error);
+
+  }
+
+});
+
+
+
+export default router;
+
+
+
+frontend :-
+
+
+
+src/components/DataTable.tsx-
+
+import React, { useState, useEffect } from 'react';
+
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+
+import { useAuth } from '../context/AuthContext';
+
+
+
+interface PaginationProps {
+
+  total: number;
+
+  page: number;
+
+  pages: number;
+
+  onPageChange: (page: number) => void;
+
+}
+
+
+
+function Pagination({ total, page, pages, onPageChange }: PaginationProps) {
+
+  return (
+
+    <div className="flex items-center justify-between px-4 py-3 border-t">
+
+      <div className="flex-1 flex justify-between sm:hidden">
+
+        <button
+
+          onClick={() => onPageChange(page - 1)}
+
+          disabled={page <= 1}
+
+          className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+
+        >
+
+          Previous
+
+        </button>
+
+        <button
+
+          onClick={() => onPageChange(page + 1)}
+
+          disabled={page >= pages}
+
+          className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+
+        >
+
+          Next
+
+        </button>
+
+      </div>
+
+      <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+
+        <div>
+
+          <p className="text-sm text-gray-700">
+
+            Showing page <span className="font-medium">{page}</span> of{' '}
+
+            <span className="font-medium">{pages}</span> ({total} total records)
+
+          </p>
+
+        </div>
+
+        <div>
+
+          <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+
+            <button
+
+              onClick={() => onPageChange(page - 1)}
+
+              disabled={page <= 1}
+
+              className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+
+            >
+
+              <ChevronLeft className="h-5 w-5" />
+
+            </button>
+
+            <button
+
+              onClick={() => onPageChange(page + 1)}
+
+              disabled={page >= pages}
+
+              className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+
+            >
+
+              <ChevronRight className="h-5 w-5" />
+
+            </button>
+
+          </nav>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+
+
+export default function DataTable() {
+
+  const [data, setData] = useState<any[]>([]);
+
+  const [loading, setLoading] = useState(false);
+
+  const [error, setError] = useState<string | null>(null);
+
+  const [page, setPage] = useState(1);
+
+  const [totalPages, setTotalPages] = useState(1);
+
+  const [totalRecords, setTotalRecords] = useState(0);
+
+  const { token } = useAuth();
+
+
+
+  useEffect(() => {
+
+
+
+    const fetchData = async () => {
+
+      try {
+
+        setLoading(true);
+
+        const response = await fetch(
+
+          `http://localhost:5000/csv/data?page=${page}&limit=10`,
+
+          {
+
+            headers: {
+
+              'Authorization': `Bearer ${token}`
+
+            }
+
+          }
+
+        );
+
+
+
+        if (!response.ok) {
+
+          throw new Error('Failed to fetch data');
+
+        }
+
+
+
+        const result = await response.json();
+
+        setData(result.data);
+
+        setTotalPages(result.pagination.pages);
+
+        setTotalRecords(result.pagination.total);
+
+      } catch (err) {
+
+        setError(err instanceof Error ? err.message : 'An error occurred');
+
+      } finally {
+
+        setLoading(false);
+
+      }
+
+    };
+
+
+
+    fetchData();
+
+  }, [page, token]);
+
+
+
+  if (error) {
+
+    return (
+
+      <div className="text-center py-8 text-red-600">
+
+        Error: {error}
+
+      </div>
+
+    );
+
+  }
+
+
+
+  if (loading) {
+
+    return (
+
+      <div className="flex justify-center items-center py-8">
+
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+
+      </div>
+
+    );
+
+  }
+
+
+
+  if (data.length === 0) {
+
+    return (
+
+      <div className="text-center py-8 text-gray-500">
+
+        No data available. Upload a CSV file to get started.
+
+      </div>
+
+    );
+
+  }
+
+
+
+  // Dynamically get headers from the first data item
+
+  const headers = Object.keys(data[0]?.data[0] || {});
+
+
+
+  return (
+
+    <div className="overflow-x-auto">
+
+      <table className="min-w-full divide-y divide-gray-200">
+
+        <thead className="bg-gray-50">
+
+          <tr>
+
+            {headers.map((header) => (
+
+              <th
+
+                key={header}
+
+                scope="col"
+
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+
+              >
+
+                {header}
+
+              </th>
+
+            ))}
+
+          </tr>
+
+        </thead>
+
+        <tbody className="bg-white divide-y divide-gray-200">
+
+          {data.map((item) => (
+
+            item.data.map((row: any, rowIndex: number) => (
+
+              <tr key={`${item._id}-${rowIndex}`}>
+
+                {headers.map((header) => (
+
+                  <td
+
+                    key={header}
+
+                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"
+
+                  >
+
+                    {row[header]}
+
+                  </td>
+
+                ))}
+
+              </tr>
+
+            ))
+
+          ))}
+
+        </tbody>
+
+      </table>
+
+
+
+      <Pagination
+
+        total={totalRecords}
+
+        page={page}
+
+        pages={totalPages}
+
+        onPageChange={setPage}
+
+      />
+
+    </div>
+
+  );
+
+}
+
+src/components/layout.tsx-
 
 import React from 'react';
 
@@ -160,7 +823,7 @@ export default function Layout() {
 
             <div className="flex">
 
-              <Link to="" className="flex items-center">
+              <Link to="/dashboard" className="flex items-center">
 
                 <LayoutDashboard className="h-8 w-8 text-indigo-600" />
 
@@ -250,311 +913,7 @@ export default function Layout() {
 
 }
 
-
-
-2 -
-
-import React, { useState, useCallback } from 'react';
-
-import { Upload, FileUp, Loader2 } from 'lucide-react';
-
-import { toast } from 'react-hot-toast';
-
-import DataTable from '../components/DataTable';
-
-import { useAuth } from '../context/AuthContext';
-
-
-
-export default function Dashboard() {
-
-  const [isUploading, setIsUploading] = useState(false);
-
-  const [uploadProgress, setUploadProgress] = useState(0);
-
-  const { token } = useAuth();
-
-
-
-  const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-
-    const file = event.target.files?.[0];
-
-    if (!file) return;
-
-
-
-    // Validate file type
-
-    if (!file.name.endsWith('.csv')) {
-
-      toast.error('Please upload a CSV file');
-
-      return;
-
-    }
-
-
-
-    setIsUploading(true);
-
-    setUploadProgress(0);
-
-
-
-    const formData = new FormData();
-
-    formData.append('file', file);
-
-
-
-    try {
-
-      const response = await fetch('http://localhost:5000/csv/upload', {
-
-        method: 'POST',
-
-        headers: {
-
-          'Authorization': `Bearer ${token}`
-
-        },
-
-        body: formData
-
-      });
-
-
-
-      if (!response.ok) {
-
-        throw new Error('Upload failed');
-
-      }
-
-
-
-      toast.success('File uploaded successfully');
-
-    } catch (error) {
-
-      console.error('Upload error:', error);
-
-      toast.error('Failed to upload file');
-
-    } finally {
-
-      setIsUploading(false);
-
-      setUploadProgress(0);
-
-    }
-
-  }, [token]);
-
-
-
-  return (
-
-    <div className="space-y-8">
-
-      {/* Header */}
-
-      <div className="bg-white p-6 rounded-lg shadow-sm">
-
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-
-        <p className="mt-2 text-gray-600">Upload and manage your CSV files</p>
-
-      </div>
-
-
-
-      {/* Upload Section */}
-
-      <div className="bg-white p-8 rounded-lg shadow-sm">
-
-        <div className="max-w-xl mx-auto text-center">
-
-          <Upload className="mx-auto h-12 w-12 text-gray-400" />
-
-          <h2 className="mt-4 text-xl font-semibold text-gray-900">
-
-            Upload your CSV file
-
-          </h2>
-
-          <p className="mt-2 text-gray-500">
-
-            Drag and drop your CSV file here, or click to select a file
-
-          </p>
-
-          
-
-          <div className="mt-8">
-
-            <label className="relative">
-
-              <input
-
-                type="file"
-
-                className="hidden"
-
-                accept=".csv"
-
-                onChange={handleFileUpload}
-
-                disabled={isUploading}
-
-              />
-
-              <div className={`
-
-                flex items-center justify-center px-6 py-4 border-2 border-dashed
-
-                rounded-lg cursor-pointer hover:border-indigo-500 transition-colors
-
-                ${isUploading ? 'bg-gray-50 border-gray-300' : 'border-gray-300 hover:bg-gray-50'}
-
-              `}>
-
-                {isUploading ? (
-
-                  <div className="flex items-center space-x-3">
-
-                    <Loader2 className="h-5 w-5 animate-spin text-indigo-500" />
-
-                    <span className="text-gray-600">Uploading... {uploadProgress}%</span>
-
-                  </div>
-
-                ) : (
-
-                  <div className="flex items-center space-x-3">
-
-                    <FileUp className="h-5 w-5 text-gray-400" />
-
-                    <span className="text-gray-600">Select CSV file</span>
-
-                  </div>
-
-                )}
-
-              </div>
-
-            </label>
-
-          </div>
-
-
-
-          <div className="mt-4 text-sm text-gray-500">
-
-            Maximum file size: 50MB
-
-          </div>
-
-        </div>
-
-      </div>
-
-
-
-      {/* Data Table */}
-
-      <div className="bg-white rounded-lg shadow-sm">
-
-        <DataTable />
-
-      </div>
-
-    </div>
-
-  );
-
-}
-
-
-
-3-
-
-import React from 'react';
-
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-
-import { Toaster } from 'react-hot-toast';
-
-import { AuthProvider } from './context/AuthContext';
-
-import Layout from './components/Layout';
-
-import ProtectedRoute from './components/ProtectedRoute';
-
-import Login from './pages/Login';
-
-import Dashboard from './pages/Dashboard';
-
-import Signup from './pages/Signup';
-
-
-
-function App() {
-
-    return (
-
-        <AuthProvider>
-
-            <BrowserRouter>
-
-                <Toaster position="top-right" />
-
-                <Routes>
-
-                    <Route path="/" element={<Layout />}>
-
-                        <Route index element={<Navigate to="/signup" replace />} /> {/* Changed to /signup */}
-
-                        <Route path="login" element={<Login />} />
-
-                        <Route path="signup" element={<Signup />} />
-
-                        <Route
-
-                            path="dashboard"
-
-                            element={
-
-                                <ProtectedRoute>
-
-                                    <Dashboard />
-
-                                </ProtectedRoute>
-
-                            }
-
-                        />
-
-                    </Route>
-
-                </Routes>
-
-            </BrowserRouter>
-
-        </AuthProvider>
-
-    );
-
-}
-
-
-
-export default App;
-
-
-
-4-
+src/context/AuthContext.tsx-
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
@@ -766,346 +1125,315 @@ export function useAuth() {
 
 }
 
+src/pages/Dashboard.tsx-
 
+import React, { useState, useCallback } from 'react';
 
-5-
+import { Upload, FileUp, Loader2 } from 'lucide-react';
 
+import { toast } from 'react-hot-toast';
 
+import DataTable from '../components/DataTable';
 
-import express from 'express';
-
-import jwt from 'jsonwebtoken';
-
-import User from '../models/User.js';
-
-import { authenticateToken } from '../middleware/auth.js';
-
-
-
-const router = express.Router();
+import { useAuth } from '../context/AuthContext';
 
 
 
-// Register new user
+export default function Dashboard() {
 
-router.post('/register', async (req, res, next) => {
+    const [isUploading, setIsUploading] = useState(false);
 
-    try {
+    const [uploadProgress, setUploadProgress] = useState(0);
 
-        const { email, password } = req.body;
+    const { token } = useAuth();
 
-
-
-        const existingUser = await User.findOne({ email });
-
-        if (existingUser) {
-
-            return res.status(400).json({ message: 'Email already registered' });
-
-        }
+    const [refreshData, setRefreshData] = useState(false); // Added refresh state
 
 
 
-        const user = new User({ email, password });
+    const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
 
-        await user.save();
+        const file = event.target.files?.[0];
 
-
-
-        const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-
-            expiresIn: '24h'
-
-        });
+        if (!file) return;
 
 
 
-        res.status(201).json({
+        // Validate file type
 
-            user: { id: user._id, email: user.email },
+        if (!file.name.endsWith('.csv')) {
 
-            token
+            toast.error('Please upload a CSV file');
 
-        });
-
-    } catch (error) {
-
-        next(error);
-
-    }
-
-});
-
-
-
-// Login user
-
-router.post('/login', async (req, res, next) => { // Removed /auth prefix
-
-    try {
-
-        const { email, password } = req.body;
-
-
-
-        const user = await User.findOne({ email });
-
-        if (!user) {
-
-            return res.status(401).json({ message: 'Invalid credentials' });
+            return;
 
         }
 
 
 
-        const isMatch = await user.comparePassword(password);
+        setIsUploading(true);
 
-        if (!isMatch) {
+        setUploadProgress(0);
 
-            return res.status(401).json({ message: 'Invalid credentials' });
+
+
+        const formData = new FormData();
+
+        formData.append('file', file);
+
+
+
+        try {
+
+            const response = await fetch('http://localhost:5000/csv/upload', {
+
+                method: 'POST',
+
+                headers: {
+
+                    'Authorization': `Bearer ${token}`
+
+                },
+
+                body: formData
+
+            });
+
+
+
+            if (!response.ok) {
+
+                throw new Error('Upload failed');
+
+            }
+
+
+
+            // Assuming the server returns some data after uploading the file, handle it here.
+
+            toast.success('File uploaded successfully');
+
+            setRefreshData(true);
+
+
+
+        } catch (error) {
+
+            console.error('Upload error:', error);
+
+            toast.error('Failed to upload file');
+
+        } finally {
+
+            console.log("Uploaded and setting")
+
+            setIsUploading(false);
+
+            setUploadProgress(0);
 
         }
 
+    }, [token]);
 
 
-        const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
 
-            expiresIn: '24h'
+    return (
 
-        });
+        <div className="space-y-8">
 
+            {/* Header */}
 
+            <div className="bg-white p-6 rounded-lg shadow-sm">
 
-        res.json({
+                <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
 
-            user: { id: user._id, email: user.email },
+                <p className="mt-2 text-gray-600">Upload and manage your CSV files</p>
 
-            token
+            </div>
 
-        });
 
-    } catch (error) {
 
-        next(error);
+            {/* Upload Section */}
 
-    }
+            <div className="bg-white p-8 rounded-lg shadow-sm">
 
-});
+                <div className="max-w-xl mx-auto text-center">
 
+                    <Upload className="mx-auto h-12 w-12 text-gray-400" />
 
+                    <h2 className="mt-4 text-xl font-semibold text-gray-900">
 
-// Get current user
+                        Upload your CSV file
 
-router.get('/me', authenticateToken, (req, res) => { // Removed /auth prefix
+                    </h2>
 
-    res.json({ user: req.user });
+                    <p className="mt-2 text-gray-500">
 
-});
+                        Drag and drop your CSV file here, or click to select a file
 
+                    </p>
 
 
-export default router;
 
+                    <div className="mt-8">
 
+                        <label className="relative">
 
-6-
+                            <input
 
-import express from 'express';
+                                type="file"
 
-import cors from 'cors';
+                                className="hidden"
 
-import dotenv from 'dotenv';
+                                accept=".csv"
 
-import mongoose from 'mongoose';
+                                onChange={handleFileUpload}
 
-import rateLimit from 'express-rate-limit';
+                                disabled={isUploading}
 
+                            />
 
+                            <div className={`
 
-import authRoutes from './routes/auth.js';
+                                flex items-center justify-center px-6 py-4 border-2 border-dashed
 
-import csvRoutes from './routes/csv.js';
+                                rounded-lg cursor-pointer hover:border-indigo-500 transition-colors
 
-import { errorHandler } from './middleware/errorHandler.js';
+                                ${isUploading ? 'bg-gray-50 border-gray-300' : 'border-gray-300 hover:bg-gray-50'}
 
+                            `}>
 
+                                {isUploading ? (
 
-dotenv.config();
+                                    <div className="flex items-center space-x-3">
 
+                                        <Loader2 className="h-5 w-5 animate-spin text-indigo-500" />
 
+                                        <span className="text-gray-600">Uploading... {uploadProgress}%</span>
 
-const app = express();
+                                    </div>
 
+                                ) : (
 
+                                    <div className="flex items-center space-x-3">
 
-// Rate limiting
+                                        <FileUp className="h-5 w-5 text-gray-400" />
 
-const limiter = rateLimit({
+                                        <span className="text-gray-600">Select CSV file</span>
 
-    windowMs: 15 * 60 * 1000, // 15 minutes
+                                    </div>
 
-    max: 100 // limit each IP to 100 requests per windowMs
+                                )}
 
-});
+                            </div>
 
+                        </label>
 
+                    </div>
 
-// Middleware
 
-app.use(cors());
 
-app.use(express.json());
+                    <div className="mt-4 text-sm text-gray-500">
 
-app.use(limiter);
+                        Maximum file size: 50MB
 
+                    </div>
 
+                </div>
 
-// Routes
+            </div>
 
-app.use('/auth', authRoutes);
 
-app.use('/csv', csvRoutes);
 
+            {/* Data Table */}
 
+            <div className="bg-white rounded-lg shadow-sm">
 
-// Error handling
+                {refreshData ? 
 
-app.use(errorHandler);
+                <DataTable /> : <div></div>}
 
+            </div>
 
+        </div>
 
-// MongoDB connection with improved error handling
+    );
 
-mongoose.connect(process.env.MONGODB_URI)
+}
 
-    .then(() => {
 
-        console.log('Successfully connected to MongoDB Atlas');
 
-    })
+app.tsx-
 
-    .catch((error) => {
+import React from 'react';
 
-        console.error('MongoDB connection error:', error);
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
-        process.exit(1); // Exit process with failure
+import { Toaster } from 'react-hot-toast';
 
-    });
+import { AuthProvider } from './context/AuthContext';
 
+import Layout from './components/Layout';
 
+import ProtectedRoute from './components/ProtectedRoute';
 
-// Start server
+import Login from './pages/Login';
 
-const PORT = process.env.PORT || 5000;
+import Dashboard from './pages/Dashboard';
 
-app.listen(PORT, () => {
+import Signup from './pages/Signup';
 
-    console.log(`Server running on port ${PORT}`);
 
-});
 
+function App() {
 
+    return (
 
-7-
+        <AuthProvider>
 
+            <BrowserRouter>
 
+                <Toaster position="top-right" />
 
-import mongoose from 'mongoose';
+                <Routes>
 
+                    <Route path="/" element={<Layout />}>
 
+                        <Route index element={<Navigate to="/signup" replace />} /> {/* Changed to /signup */}
 
-const csvDataSchema = new mongoose.Schema({
+                        <Route path="login" element={<Login />} />
 
-  userId: {
+                        <Route path="signup" element={<Signup />} />
 
-    type: mongoose.Schema.Types.ObjectId,
+                        <Route
 
-    ref: 'User',
+                            path="dashboard"
 
-    required: true
+                            element={
 
-  },
+                                <ProtectedRoute>
 
-  fileName: {
+                                    <Dashboard />
 
-    type: String,
+                                </ProtectedRoute>
 
-    required: true
+                            }
 
-  },
+                        />
 
-  data: {
+                    </Route>
 
-    type: [mongoose.Schema.Types.Mixed],
+                </Routes>
 
-    required: true
+            </BrowserRouter>
 
-  },
+        </AuthProvider>
 
-  uploadedAt: {
+    );
 
-    type: Date,
+}
 
-    default: Date.now
 
-  }
 
-});
+export default App;
 
-
-
-// Index for efficient querying
-
-csvDataSchema.index({ userId: 1, uploadedAt: -1 });
-
-
-
-export default mongoose.model('CsvData', csvDataSchema);
-
-
-
-8-
-
-import { defineConfig } from 'vite';
-
-import react from '@vitejs/plugin-react';
-
-
-
-export default defineConfig({
-
-    plugins: [react()],
-
-    optimizeDeps: {
-
-        exclude: ['lucide-react'],
-
-    },
-
-    server: {
-
-        proxy: {
-
-            '/api': {
-
-                target: 'http://localhost:5000',
-
-                changeOrigin: true,
-
-                rewrite: (path) => path.replace(/^\/api/, ''),
-
-            },
-
-            '/auth': {
-
-                target: 'http://localhost:5000',
-
-                changeOrigin: true,
-
-            },
-
-        },
-
-    },
-
-});

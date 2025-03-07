@@ -20,7 +20,7 @@ const limiter = rateLimit({
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: '10mb' })); // Increase limit to 10MB or more
+app.use(express.json());
 app.use(limiter);
 
 // Routes
